@@ -1,0 +1,295 @@
+---
+title: "Variance"
+author: "Louis Yong Yang Yen"
+date: "23/04/2022"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(stringr)
+library(tidytext)
+library(tm)
+library(ggrepel)
+
+```
+
+
+Source of Ratings:
+https://www.whoscored.com/ - date: 22/4/22
+
+```{r}
+data<-read.csv("Original_Scrape.csv",stringsAsFactors = F)
+```
+
+## Perfect Scores
+```{r}
+Perfect_Scores<-data%>%
+  filter(Rating=="10.00")
+DT::datatable(Perfect_Scores)
+  
+```
+
+## Cleaning
+```{r}
+
+data_clean<-data%>%
+  separate(Player.1,into = c("Name","Starting_Position"),sep=",")%>%
+  filter(!Rating=="-")%>%
+  mutate(Rating=as.numeric(Rating),
+         Starting_Position=trimws(Starting_Position))
+
+
+data_clean$Name2<-gsub(x=data_clean$Name,pattern ="\\(([^()]+)\\)" ,replacement = "")
+
+
+
+
+data_clean<-data_clean%>%
+  mutate(age=as.numeric(str_extract(Name2,pattern = "[:digit:]+")))
+
+data_clean$NameFinal<-trimws(removeNumbers(data_clean$Name2))
+
+data_clean<-data_clean%>%
+  separate(date,into = c("day","date"),sep=",")%>%
+  mutate(day=trimws(day),
+         date=trimws(date))
+
+sub_mins<-str_extract_all(data_clean$Name,pattern = "\\(([^()]+)\\)",simplify = T)%>%
+  data.frame()
+
+
+
+  
+```
+
+```{r}
+data_clean<-data_clean%>%
+  group_by(NameFinal)%>%
+  mutate(numberofmatches=n())
+
+data_clean<-data_clean%>%
+  group_by(NameFinal)%>%
+  mutate(mean=mean(Rating))%>%
+  ungroup()
+
+data_clean<-data_clean%>%
+  mutate(deviation=Rating-mean,
+         square=deviation^2)%>%
+  group_by(NameFinal)%>%
+  mutate(square_sum=sum(square))%>%
+  ungroup()
+
+data_clean<-data_clean%>%
+  mutate(variance=square_sum/(numberofmatches-1))
+
+stats<-data_clean%>%
+  select(NameFinal,variance,mean,numberofmatches,age,squad)%>%
+  unique()
+
+
+stats_pos<-data_clean%>%
+  mutate(position=case_when(
+    Starting_Position%in%c("AMC","AML","AMR")~"Attacking Midfielders",
+    Starting_Position%in%c("DC","DL","DR")~"Defenders",
+    Starting_Position%in%c("DMC","DML","DMR")~"Defensive Midfielders",
+    Starting_Position%in%c("FW","FWL","FWR")~"Forwards",
+    Starting_Position%in%c("GK")~"GoalKeepers",
+    Starting_Position%in%c("MC","MR","ML")~"Midfielders",
+    Starting_Position%in%c("Sub")~"Subs"
+  ))%>%
+  select(NameFinal,variance,mean,numberofmatches,age,squad,position)%>%
+  unique()
+
+
+stats_10<-stats%>%
+  filter(numberofmatches>9)
+
+stats_pos_10<-stats_pos%>%
+  filter(numberofmatches>9)
+
+```
+
+## Graphs
+```{r,warning=FALSE}
+
+annotations <- data.frame(
+  xpos = c(-Inf,-Inf,Inf,Inf),
+  ypos =  c(-Inf, Inf,-Inf,Inf),
+  annotateText = c("Consistently Shit","Inconsistently shit?"
+                   ,"Consistently Good","Inconsistently Good?"),
+  hjustvar = c(0,0,1,1) ,
+  vjustvar = c(-0.5,1,-0.5,1))
+
+ggplot()+
+  geom_point(data=stats_10,aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance",subtitle = "At least 10 appearances (inc  Subs)")+
+  geom_text_repel(data=stats_10,aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")
+  
+```
+```{r,warning=FALSE}
+data_clean_no_subs<-data_clean%>%
+  filter(!Starting_Position=="Sub")%>%
+  group_by(NameFinal)%>%
+  mutate(numberofmatches=n())
+
+data_clean_no_subs<-data_clean_no_subs%>%
+  group_by(NameFinal)%>%
+  mutate(mean=mean(Rating))%>%
+  ungroup()
+
+data_clean_no_subs<-data_clean_no_subs%>%
+  mutate(deviation=Rating-mean,
+         square=deviation^2)%>%
+  group_by(NameFinal)%>%
+  mutate(square_sum=sum(square))%>%
+  ungroup()
+
+data_clean_no_subs<-data_clean_no_subs%>%
+  mutate(variance=square_sum/(numberofmatches-1))
+
+data_clean_no_subs<-data_clean_no_subs%>%
+  select(NameFinal,variance,mean,numberofmatches,age,squad)%>%
+  unique()
+
+ggplot()+
+  geom_point(data=stats_10,aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance",subtitle = "At least 10 appearances (exc Subs)")+
+  geom_text_repel(data=stats_10,aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")
+
+```
+
+
+
+
+
+```{r,warning=FALSE}
+Subs_version<-data_clean%>%
+  filter(Starting_Position=="Sub")%>%
+  group_by(NameFinal)%>%
+  mutate(numberofmatches=n())
+
+Subs_version<-Subs_version%>%
+  group_by(NameFinal)%>%
+  mutate(mean=mean(Rating))%>%
+  ungroup()
+
+Subs_version<-Subs_version%>%
+  mutate(deviation=Rating-mean,
+         square=deviation^2)%>%
+  group_by(NameFinal)%>%
+  mutate(square_sum=sum(square))%>%
+  ungroup()
+
+Subs_version<-Subs_version%>%
+  mutate(variance=square_sum/(numberofmatches-1))
+
+stats_Subs<-Subs_version%>%
+  select(NameFinal,variance,mean,numberofmatches,age,squad)%>%
+  unique()
+
+stats_Subs_5<-stats_Subs%>%
+  filter(numberofmatches>4)
+
+ggplot()+
+  geom_point(data=stats_Subs_5,aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance",subtitle = "At least 5 sub appearances")+ 
+  geom_text_repel(data=stats_Subs_5,aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")+
+  ylim(-.1,1)
+
+```
+
+
+```{r,warning=FALSE}
+ggplot()+
+  geom_point(data=stats_pos_10%>%
+               filter(position=="Attacking Midfielders"),aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance - Attacking Midfielders",subtitle = "At least 10 appearances")+ 
+  geom_text_repel(data=stats_pos_10%>%
+               filter(position=="Attacking Midfielders"),aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")+
+  ylim(-.1,1.3)
+```
+```{r,warning=FALSE}
+ggplot()+
+  geom_point(data=stats_pos_10%>%
+               filter(position=="Defenders"),aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance - Defenders",subtitle = "At least 10 appearances")+ 
+  geom_text_repel(data=stats_pos_10%>%
+               filter(position=="Defenders"),aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")+
+  ylim(-.1,1.3)
+```
+
+```{r,warning=FALSE}
+ggplot()+
+  geom_point(data=stats_pos_10%>%
+               filter(position=="Defensive Midfielders"),aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance - Defensive Midfielders",subtitle = "At least 10 appearances")+ 
+  geom_text_repel(data=stats_pos_10%>%
+               filter(position=="Defensive Midfielders"),aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")+
+  ylim(-.1,1.3)
+```
+```{r,warning=FALSE}
+ggplot()+
+  geom_point(data=stats_pos_10%>%
+               filter(position=="Forwards"),aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance - Forwards",subtitle = "At least 10 appearances")+ 
+  geom_text_repel(data=stats_pos_10%>%
+               filter(position=="Forwards"),aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")+
+  ylim(-.1,2.3)
+```
+
+```{r,warning=FALSE}
+ggplot()+
+  geom_point(data=stats_pos_10%>%
+               filter(position=="GoalKeepers"),aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance - GoalKeepers",subtitle = "At least 10 appearances")+ 
+  geom_text_repel(data=stats_pos_10%>%
+               filter(position=="GoalKeepers"),aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")+
+  ylim(-.1,1.3)
+```
+
+```{r,warning=FALSE}
+ggplot()+
+  geom_point(data=stats_pos_10%>%
+               filter(position=="Midfielders"),aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance - Midfielders",subtitle = "At least 10 appearances")+ 
+  geom_text_repel(data=stats_pos_10%>%
+               filter(position=="Midfielders"),aes(x=mean,y=variance,label=NameFinal))+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")+
+  ylim(-.1,1.3)
+```
+```{r,fig.height=90,fig.width=10,warning=FALSE}
+ggplot(data=stats_10,aes(x=mean,y=variance))+
+  geom_point()+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance By Teams",subtitle = "At least 10 appearances")+
+  ylim(-0.1,1.1)+
+  geom_text_repel(data=stats_10,aes(x=mean,y=variance,label=NameFinal),size=3)+
+  facet_wrap(~squad,ncol=1)+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")
+
+
+```
+
