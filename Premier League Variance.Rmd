@@ -292,4 +292,117 @@ ggplot(data=stats_10,aes(x=mean,y=variance))+
 
 
 ```
+## Players In positions
+```{r}
+
+data_clean_positions<-data_clean%>%
+  filter(!Starting_Position=="Sub")%>%
+  group_by(NameFinal,Starting_Position,squad)%>%
+  mutate(numberofmatches_in_position=n(),
+         percentageinpostion=round(numberofmatches_in_position/numberofmatches,2),
+         mean=mean(Rating),
+         deviation=Rating-mean,
+         square=deviation^2,
+         square_sum=sum(square),
+         variance=square_sum/(numberofmatches-1))%>%
+  ungroup()
+
+stats_postions2<-data_clean_positions%>%
+  select(NameFinal,variance,mean,numberofmatches,age,squad,Starting_Position,numberofmatches_in_position,percentageinpostion)%>%
+  unique()%>%
+  filter(numberofmatches_in_position>4)
+
+
+ggplot()+
+  geom_point(data=stats_postions2,aes(x=percentageinpostion,y=variance))+
+  theme_classic()+
+  labs(x="% of Matches in Position",y="Variance",title="Variance vs % of matches in Position",
+       subtitle = "At Least 5 matches in a position")
+
+```
+
+```{r,fig.height=90,fig.width=10,warning=FALSE}
+ggplot(data=stats_postions2,aes(x=mean,y=variance))+
+  geom_point()+
+  theme_classic()+
+  labs(x="Average Rating",y="Variance",title = "Average Rating v Variance By Position",subtitle = "At least 5 appearances in position")+
+  ylim(-0.1,1.1)+
+  geom_text_repel(data=stats_postions2,aes(x=mean,y=variance,label=NameFinal),size=3)+
+  facet_wrap(~Starting_Position,ncol=1)+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")
+
+
+```
+
+
+```{r,fig.height=20,fig.width=10}
+stats_positions3<-data_clean%>%
+  select(NameFinal,variance,mean,numberofmatches,age,Starting_Position)%>%
+  filter(!Starting_Position=="Sub")%>%
+  unique()%>%
+  group_by(NameFinal)%>%
+  mutate(different_position=n(),
+         different_position_text=case_when(
+           different_position==1~"1",
+           different_position==2~"2",
+           different_position==3~"3",
+           different_position==4~"4",
+           different_position==5~"5",
+           different_position==6~"6",
+           different_position==7~"7",
+           different_position==8~"8"
+         ))%>%
+  ungroup()%>%
+  filter(numberofmatches>9)
+
+ggplot(data=stats_positions3)+
+  geom_point(aes(x=mean,y=variance))+
+  theme_classic()+
+  labs(title="Checking consistancy when playing in multiple positions",
+       subtitle="At least 5 Matches")+
+  facet_wrap(~different_position_text,ncol=2)
+                
+  
+
+```
+### Seems when you play more positions you are more consistant but less good
+
+## Variance V Top 6
+
+```{r}
+top6<-c("Arsenal","Chelsea","Liverpool","Manchester City","Manchester United","Tottenham")
+
+top6_data_clean<-data_clean%>%
+  filter(opp%in%top6)%>%
+  group_by(NameFinal)%>%
+  mutate(numberofmatches=n(),
+         mean=mean(Rating),
+         deviation=Rating-mean,
+         square=deviation^2,
+         square_sum=sum(square),
+         variance=square_sum/(numberofmatches-1))%>%
+  ungroup()%>%
+  filter(numberofmatches>4)
+
+
+stats<-data_clean%>%
+  select(NameFinal,variance,mean,numberofmatches,age,squad)%>%
+  unique()
+
+top6_stats<-top6_data_clean%>%
+  select(NameFinal,variance,mean,numberofmatches)%>%
+  unique()
+
+
+ggplot(data=top6_stats,aes(x=mean,y=variance))+
+  geom_point()+
+  theme_classic()+
+  geom_text_repel(data=top6_stats,aes(x=mean,y=variance,label=NameFinal),box.padding = 0.1)+
+  geom_text(data=annotations,aes(x=xpos,y=ypos,hjust=hjustvar,vjust=vjustvar,label=annotateText),color="red")+
+  labs(title="Variance v Average Ratings against top 6",
+       subtitle="At least 5 Appearances",x="Average Ratings",y="Variance")+
+  ylim(-0.1,3.5)
+
+
+```
 
